@@ -12,7 +12,7 @@ def sleep(seconds: int):
     thread.start()
 
 def shutdown(seconds: int):
-    command = {"cmd": "shutdown /s", "seconds": seconds}
+    command = {"cmd": "shutdown /f", "seconds": seconds}
     thread = threading.Thread(target=execute, args=(command,))
     thread.start()
 
