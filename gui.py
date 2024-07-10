@@ -39,15 +39,15 @@ class TimeSelector(tk.Frame):
 
 def hibernate_submit() -> None:
     hibernate_time = time_selector.get_time()
-    logic.put_to_sleep(hibernate_time)
+    logic.sleep(hibernate_time)
 
-def hibernate_submit() -> None:
-    hibernate_time = time_selector.get_time()
-    logic.put_to_sleep(hibernate_time)
+def shutdown_submit() -> None:
+    shutdown_time = time_selector.get_time()
+    logic.shutdown(shutdown_time)
 
-def hibernate_submit() -> None:
-    hibernate_time = time_selector.get_time()
-    logic.put_to_sleep(hibernate_time)
+def reboot_submit() -> None:
+    reboot_time = time_selector.get_time()
+    logic.reboot(reboot_time)
 
 def move_window_to_bottom_right(window):
     window.update_idletasks()

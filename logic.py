@@ -2,13 +2,21 @@ import time
 import threading
 import os
 
-def hibernate_thread(seconds):
-    time.sleep(seconds)
-    hibernate()
+def execute(command):
+    time.sleep(command['seconds'])
+    os.system(command['cmd'])
 
-def hibernate():
-    os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+def sleep(seconds: int):
+    command = {"cmd": "rundll32.exe powrprof.dll,SetSuspendState 0,1,0","seconds": seconds}
+    thread = threading.Thread(target=execute, args=(command,))
+    thread.start()
 
-def put_to_sleep(seconds: int):
-    thread = threading.Thread(target=hibernate_thread, args=(seconds,))
+def shutdown(seconds: int):
+    command = {"cmd": "shutdown /s", "seconds": seconds}
+    thread = threading.Thread(target=execute, args=(command,))
+    thread.start()
+
+def reboot(seconds: int):
+    command = {"cmd": "shutdown /r", "seconds": seconds}
+    thread = threading.Thread(target=execute, args=(command,))
     thread.start()
