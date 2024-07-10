@@ -106,10 +106,10 @@ button_frame.pack(expand=True)
 hibernate_button = ttk.Button(button_frame, text="Hibernate", command=hibernate_submit)
 hibernate_button.pack(side=tk.LEFT, padx=5)
 
-shutdown_button = ttk.Button(button_frame, text="Shutdown", command=lambda: showerror(title="Not implemented", message="The shutdown function is not implemented yet"))
+shutdown_button = ttk.Button(button_frame, text="Shutdown", command=shutdown_submit)
 shutdown_button.pack(side=tk.LEFT, padx=5)
 
-reboot_button = ttk.Button(button_frame, text="Reboot", command=lambda: showerror(title="Not implemented", message="The reboot function is not implemented yet"))
+reboot_button = ttk.Button(button_frame, text="Reboot", command=reboot_submit)
 reboot_button.pack(side=tk.LEFT, padx=5)
 
 hide_button = ttk.Button(root, text="Hide to tray", command=hide_window)
