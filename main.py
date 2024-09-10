@@ -2,14 +2,16 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter.messagebox import showerror
 import sys
+import os
+import time
+import threading
+
 from PIL import Image, ImageDraw
-
-
 import sv_ttk
 import pystray
 from pystray import MenuItem as item
 
-import logic
+# import logic
 
 
 class TimeSelector(tk.Frame):
@@ -37,17 +39,40 @@ class TimeSelector(tk.Frame):
         time = int(self.hours_var.get()) * 3600 + int(self.minutes_var.get()) * 60 + int(self.seconds_var.get())
         return time
 
-def hibernate_submit() -> None:
-    hibernate_time = time_selector.get_time()
-    logic.sleep(hibernate_time)
+class logic:
+    def __init__(self) -> None:
+        self.stop_thread = threading.Event()
 
-def shutdown_submit() -> None:
-    shutdown_time = time_selector.get_time()
-    logic.shutdown(shutdown_time)
+    def execute(self, power_signal):
+        stopped = self.stop_thread.wait(power_signal["seconds"])
+        if not stopped:
+            _ = os.system(power_signal['command']) # "_ = ..." is just for me to remember that os.system waits for the end of the command before continuing the code
+            _ = os.system(power_signal['signal'])
 
-def reboot_submit() -> None:
-    reboot_time = time_selector.get_time()
-    logic.reboot(reboot_time)
+    def hibernate(self, seconds):
+        power_signal = {"signal": "rundll32.exe powrprof.dll,SetSuspendState 0,1,0",
+                        "seconds": seconds,
+                        "command": ""}
+        self.thread = threading.Thread(target=logic.execute, args=(power_signal,), )
+        self.thread.start()
+
+    def shutdown(self, seconds):
+        power_signal = {"signal": "shutdown /f",
+                        "seconds": seconds,
+                        "command": ""}
+        self.thread = threading.Thread(target=logic.execute, args=(power_signal,))
+        self.thread.start()
+
+    def reboot(self, seconds):
+        power_signal = {"signal": "shutdown /r",
+                        "seconds": seconds,
+                        "command": ""}
+        self.thread = threading.Thread(target=logic.execute, args=(power_signal,))
+        self.thread.start()
+    
+    def stop(self):
+        self.stop_thread.set()
+        self.thread.join()
 
 def move_window_to_bottom_right(window):
     window.update_idletasks()
@@ -103,17 +128,41 @@ time_selector.pack(padx=10, pady=10)
 button_frame = tk.Frame(root)
 button_frame.pack(expand=True)
 
-hibernate_button = ttk.Button(button_frame, text="Hibernate", command=hibernate_submit)
+hibernate_button = ttk.Button(
+    button_frame,
+    text="Hibernate",
+    command= lambda: logic.hibernate(time_selector.get_time())
+)
 hibernate_button.pack(side=tk.LEFT, padx=5)
 
-shutdown_button = ttk.Button(button_frame, text="Shutdown", command=shutdown_submit)
+shutdown_button = ttk.Button(
+    button_frame,
+    text="Shutdown",
+    command= lambda: logic.shutdown(time_selector.get_time())
+)
 shutdown_button.pack(side=tk.LEFT, padx=5)
 
-reboot_button = ttk.Button(button_frame, text="Reboot", command=reboot_submit)
+reboot_button = ttk.Button(
+    button_frame,
+    text="Reboot",
+    command= lambda: logic.reboot(time_selector.get_time())
+)
 reboot_button.pack(side=tk.LEFT, padx=5)
 
-hide_button = ttk.Button(root, text="Hide to tray", command=hide_window)
-hide_button.pack(pady=5)
+abort_button = ttk.Button(
+    root,
+    text="Abort",
+    command=logic.stop
+)
+abort_button.pack(padx=10, pady=10, side="left")
+
+
+hide_button = ttk.Button(
+    root,
+    text="Hide to tray",
+    command=hide_window
+)
+hide_button.pack(padx=10, pady=10, side="right")
 
 sv_ttk.set_theme("light")
 
