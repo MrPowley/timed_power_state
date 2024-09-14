@@ -2,9 +2,8 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter.messagebox import showerror
 import sys
-import os
-import time
 import threading
+import subprocess
 
 from PIL import Image, ImageDraw
 import sv_ttk
@@ -39,39 +38,68 @@ class TimeSelector(tk.Frame):
         time = int(self.hours_var.get()) * 3600 + int(self.minutes_var.get()) * 60 + int(self.seconds_var.get())
         return time
 
-class logic:
+class Logic:
     def __init__(self) -> None:
-        self.stop_thread = threading.Event()
+        pass
 
     def execute(self, power_signal):
-        stopped = self.stop_thread.wait(power_signal["seconds"])
+        # Get abort signal
+        stopped = stop_thread.is_set() # get the value
+        # Wait for n seconds if abort signal was issued
+        for _ in range(power_signal["seconds"]):
+            stopped = stop_thread.wait(1) # Waits n seconds then returns is the event was triggered
+            if stopped:
+                break
+        
         if not stopped:
-            _ = os.system(power_signal['command']) # "_ = ..." is just for me to remember that os.system waits for the end of the command before continuing the code
-            _ = os.system(power_signal['signal'])
+            # Start the pre-ext command
+            thread = threading.Thread(target=execute_custom_command, args=(power_signal['command'],power_signal['text_catch']))
+            thread.start()
+            thread.join()
+        
+        # Get abort signal after pre-ext command ended
+        stopped = stop_thread.is_set()
+        if not stopped:
+            # Send the extinction signal
+            subprocess.Popen(power_signal['signal'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        else:
+            print("Canceled")
 
-    def hibernate(self, seconds):
+    def hibernate(self):
+        # Set the hibernate command, get the input time, pre-ext cmd, and text catch
         power_signal = {"signal": "rundll32.exe powrprof.dll,SetSuspendState 0,1,0",
-                        "seconds": seconds,
-                        "command": ""}
-        self.thread = threading.Thread(target=logic.execute, args=(power_signal,), )
+                        "seconds": time_selector.get_time(),
+                        "command": command_var.get(),
+                        "text_catch": text_catch_var.get()}
+        # Execute the desired actions
+        self.thread = threading.Thread(target=logic.execute, args=(power_signal,) )
         self.thread.start()
 
-    def shutdown(self, seconds):
+    def shutdown(self):
+        # Set the shutdown command, get the input time, pre-ext cmd, and text catch
         power_signal = {"signal": "shutdown /f",
-                        "seconds": seconds,
-                        "command": ""}
+                        "seconds": time_selector.get_time(),
+                        "command": command_var.get(),
+                        "text_catch": text_catch_var.get()}
+        # Execute the desired actions
         self.thread = threading.Thread(target=logic.execute, args=(power_signal,))
         self.thread.start()
 
-    def reboot(self, seconds):
+    def reboot(self):
+        # Set the reboot command, get the input time, pre-ext cmd, and text catch
         power_signal = {"signal": "shutdown /r",
-                        "seconds": seconds,
-                        "command": ""}
+                        "seconds": time_selector.get_time(),
+                        "command": command_var.get(),
+                        "text_catch": text_catch_var.get()}
+        # Execute the desired actions
         self.thread = threading.Thread(target=logic.execute, args=(power_signal,))
         self.thread.start()
-    
+        print("Rebooted")
+        
     def stop(self):
-        self.stop_thread.set()
+        # Set abort signal
+        stop_thread.set()
+        # Wait for threads to end
         self.thread.join()
 
 def move_window_to_bottom_right(window):
@@ -85,7 +113,7 @@ def move_window_to_bottom_right(window):
     screen_height = window.winfo_screenheight()
 
     # Calculer la position x et y pour que la fenêtre soit en bas à droite
-    x = screen_width - window_width
+    x = screen_width - window_width - 7
     y = screen_height - window_height - 70
 
     # Déplacer la fenêtre
@@ -108,22 +136,80 @@ def show_window(icon):
     icon.stop()
     root.after(0, root.deiconify)
 
-def hide_window():
+def hide_window(*args):
     root.withdraw()
     image = create_image()
     menu = (item('Show', show_window), item('Quit', quit_window))
     icon = pystray.Icon("icon", image, "Timed Power State", menu)
     icon.run()
 
+def execute_custom_command(command: str, text_catch: str) -> None:
+    # Starting pre-ext command
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+
+    # While not aborted
+    while not stop_thread.is_set():
+        # Get process output
+        output = process.stdout.readline()
+        # If there's no output and the process hasn't finished, return
+        if output == '' and process.poll() is not None:
+            return
+        # If the process sends an output and it hasn't finished
+        if output:
+            # Strip the output
+            line_output = output.strip()
+            # If user set a text_catch, look for it in the output
+            if text_catch and text_catch in line_output:
+                break
+    
+    # End process if aborted
+    process.terminate()
+    return
+
+stop_thread = threading.Event()
+logic = Logic()
 
 root = tk.Tk()
 root.title("Timed Power State")
 
 root.after(0, lambda: move_window_to_bottom_right(root))
 
-
 time_selector = TimeSelector(root)
 time_selector.pack(padx=10, pady=10)
+
+
+command_frame = ttk.Frame(root)
+command_frame.pack(padx=10, pady=10)
+
+command_text = ttk.Label(
+    command_frame,
+    text="Pre-extinction command "  
+)
+command_text.pack(side="left")
+
+command_var = tk.StringVar()
+command_entry = ttk.Entry(
+    command_frame,
+    textvariable=command_var
+)
+command_entry.pack(side="right", expand=True)
+
+text_catch_frame = ttk.Frame(root)
+text_catch_frame.pack(padx=10, pady=10)
+
+text_catch_text = ttk.Label(
+    text_catch_frame,
+    text="Catch text for extinction "
+)
+text_catch_text.pack(side="left")
+
+text_catch_var = tk.StringVar()
+text_catch_entry = ttk.Entry(
+    text_catch_frame,
+    textvariable=text_catch_var
+)
+text_catch_entry.pack(side="right", expand=True)
+
 
 button_frame = tk.Frame(root)
 button_frame.pack(expand=True)
@@ -131,21 +217,22 @@ button_frame.pack(expand=True)
 hibernate_button = ttk.Button(
     button_frame,
     text="Hibernate",
-    command= lambda: logic.hibernate(time_selector.get_time())
+    command= logic.hibernate
+    # command = lambda: print(str(command_var.get()))
 )
 hibernate_button.pack(side=tk.LEFT, padx=5)
 
 shutdown_button = ttk.Button(
     button_frame,
     text="Shutdown",
-    command= lambda: logic.shutdown(time_selector.get_time())
+    command= lambda: logic.shutdown(time_selector.get_time(), command_var.get())
 )
 shutdown_button.pack(side=tk.LEFT, padx=5)
 
 reboot_button = ttk.Button(
     button_frame,
     text="Reboot",
-    command= lambda: logic.reboot(time_selector.get_time())
+    command= lambda: logic.reboot(time_selector.get_time(), command_var.get())
 )
 reboot_button.pack(side=tk.LEFT, padx=5)
 
@@ -163,6 +250,11 @@ hide_button = ttk.Button(
     command=hide_window
 )
 hide_button.pack(padx=10, pady=10, side="right")
+
+# icon = root.bind("<Unmap>", hide_window)
+
+# root.withdraw() # hide
+
 
 sv_ttk.set_theme("light")
 
