@@ -91,8 +91,8 @@ class Logic:
         stopped = stop_thread.is_set()
         if not stopped:
             # Send the extinction signal
-            # subprocess.Popen(self.power_signal['signal'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            print("signaled")
+            subprocess.Popen(self.power_signal['signal'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # print("signaled")
         else:
             print("Canceled")
 
