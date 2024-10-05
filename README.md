@@ -15,5 +15,6 @@ Don't hesitate to [open an issue](https://github.com/MrPowley/timed_power_state/
 - Execute custom command before power signal (File copy, video conversion...)
 - Look for custom text in command output to send power signal (Sees "finished" in output -> shuts down)
 - Can abort at any time
-- Can be hid to tray (Right click > Show in tray)
+- Can be hid to tray (Right click > Show, in tray)
 - Can recognise and exact image on screen
+- Can save and load presets (Need restart)

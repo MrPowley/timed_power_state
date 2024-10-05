@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-from tkinter.messagebox import showerror
+from tkinter.messagebox import showerror, showinfo
 import tkinter.filedialog
 import sys
 import threading
@@ -15,6 +15,7 @@ import sv_ttk
 import pystray
 from pystray import MenuItem as item
 import pyautogui
+import psutil
 
 # import logic
 
@@ -56,24 +57,291 @@ class TimeSelector(tk.Frame):
         self.minutes_var.set(m)
         self.seconds_var.set(s)
 
+    
 
-class Logic:
-    def __init__(self) -> None:
-        pass
+class Main:
+    def __init__(self):
+        # Set base variables
+        self.PWD = getcwd()
+        self.stop_thread = threading.Event()
+        
+        # Creating main window
+        self.root = tk.Tk()
+        self.root.title("Timed Power Sate")
+        
+        self.time_selector = TimeSelector(self.root)
+
+        
+
+        self.load_presets()
+
+        # * Notebook Widgets =========================
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(expand=True)
+        # * =============================================
+
+        # Creating pages frames
+        self.time_page = ttk.Frame(self.notebook)
+        self.screen_page = ttk.Frame(self.notebook)
+        self.system_page = ttk.Frame(self.notebook)
+        self.preset_page = ttk.Frame(self.notebook)
+        self.preset_button_frame = ttk.Frame(self.preset_page)
+        self.preset_canvas_frame = ttk.Frame(self.preset_page)
+        self.preset_canvas = tk.Canvas(self.preset_canvas_frame, scrollregion= (0, 0, 0, len(self.presets)*35), height=self.preset_page.winfo_height(), width=75) # get_window_size(root)[0],
+
+        
+
+        self.time_page.pack(fill='both', expand=True, padx=10, pady=10)
+        self.screen_page.pack(fill='both', expand=True, padx=10, pady=10)
+        self.system_page.pack(fill="both", expand=True, padx=10, pady=10)
+        self.preset_page.pack(fill="both", expand=True, padx=10, pady=10)
+        self.preset_canvas.pack(fill='both', expand=True, padx=10, pady=10)
+        self.preset_button_frame.pack(fill="both", expand=True, side="left")
+        self.preset_canvas_frame.pack(fill="both", expand=True, side="right")
+
+        self.notebook.add(self.time_page, text='Time related')
+        self.notebook.add(self.screen_page, text='Screen related')
+        self.notebook.add(self.system_page, text='System related')
+        self.notebook.add(self.preset_page, text='Presets')
+
+        self.preset_canvas.bind("<MouseWheel>", lambda e: self.preset_canvas.yview_scroll(int(-e.delta/60), "units"))
+        self.scrollbar = ttk.Scrollbar(self.preset_canvas, orient="vertical", command=self.preset_canvas.yview)
+        self.preset_canvas.configure(yscrollcommand= self.scrollbar.set)
+        self.scrollbar.place(relx=1, rely=0, relheight=1, anchor="ne")
+
+        # * Time Page =========================
+        self.time_selector = TimeSelector(self.time_page)
+        self.time_selector.pack(padx=10, pady=10)
+        # * ===================================
+
+        # * Screen page ===========================================
+
+        self.image_filedialog_frame = ttk.Frame(self.screen_page)
+        self.image_filedialog_frame.pack(padx=10, pady=10)
+
+        self.image_filedialog_button = ttk.Button(
+            self.image_filedialog_frame, text="Open image", command=self.open_image)
+        self.image_filedialog_button.pack(side="left", padx=10, pady=10)
+
+        self.image_remove_filedialog_button = ttk.Button(
+            self.image_filedialog_frame, text="Remove image", command=self.remove_image)
+        self.image_remove_filedialog_button.pack(side="left", padx=10, pady=10)
+
+        self.image_filedialog_var = tk.StringVar()
+        self.image_filedialog_text = ttk.Label(
+            self.image_filedialog_frame, textvariable=self.image_filedialog_var)
+        self.image_filedialog_text.pack(side="right")
+
+        # * =======================================================
+
+        # * Sytem page =============================================
+        self.command_frame = ttk.Frame(self.system_page)
+        self.command_frame.pack(padx=10, pady=10)
+
+        self.command_text = ttk.Label(
+            self.command_frame,
+            text="Pre-extinction command "
+        )
+        self.command_text.pack(side="left")
+
+        self.command_var = tk.StringVar()
+        self.command_entry = ttk.Entry(
+            self.command_frame,
+            textvariable=self.command_var
+        )
+        self.command_entry.pack(side="right", expand=True)
+
+        self.text_catch_frame = ttk.Frame(self.system_page)
+        self.text_catch_frame.pack(padx=10, pady=10)
+
+        self.text_catch_text = ttk.Label(
+            self.text_catch_frame,
+            text="Catch text for extinction "
+        )
+        self.text_catch_text.pack(side="left")
+
+        self.text_catch_var = tk.StringVar()
+        self.text_catch_entry = ttk.Entry(
+            self.text_catch_frame,
+            textvariable=self.text_catch_var
+        )
+        self.text_catch_entry.pack(side="right", expand=True)
+        # * ================================================
+
+        # * Preset buttons =================================
+        self.save_preset_button = ttk.Button(self.preset_button_frame, text="Save preset", command=self.save_preset)
+        self.save_preset_button.pack(expand=True, padx=10, pady=10)
+        # * ================================================
+
+        # * Buttons ======================================
+        self.button_frame = tk.Frame(self.root)
+        self.button_frame.pack(expand=True, pady=10, padx=10)
+
+        self.hibernate_button = ttk.Button(
+            self.button_frame,
+            text="Hibernate",
+            command=self.hibernate
+            # command = lambda: print(str(command_var.get()))
+        )
+        self.hibernate_button.pack(side=tk.LEFT, padx=5)
+
+        self.shutdown_button = ttk.Button(
+            self.button_frame,
+            text="Shutdown",
+            command=self.shutdown
+        )
+        self.shutdown_button.pack(side=tk.LEFT, padx=5)
+
+        self.reboot_button = ttk.Button(
+            self.button_frame,
+            text="Reboot",
+            command=self.reboot
+        )
+        self.reboot_button.pack(side=tk.LEFT, padx=5)
+
+        self.abort_button = ttk.Button(
+            self.root,
+            text="Abort",
+            command=self.stop
+        )
+        self.abort_button.pack(padx=10, pady=10, side="left")
+
+
+        self.hide_button = ttk.Button(
+            self.root,
+            text="Hide to tray",
+            command=self.hide_window
+        )
+        self.hide_button.pack(padx=10, pady=10, side="right")
+
+        # * ==============================================
+
+        self.theme = "Light"
+        sv_ttk.set_theme(self.theme)
+
+        self.show_presets()
+        self.root.after(0, self.move_window_to_bottom_right())
+
+
+        self.root.mainloop()
+
+        sys.exit()
+
+    def show_presets(self):
+        for y_coeff, preset_name in enumerate(self.presets):
+            self.preset = self.presets[preset_name]
+            button_preset = ttk.Button(self.preset_canvas_frame, text=preset_name, command=self.choose_preset)
+            x = (self.preset_canvas.winfo_reqwidth() / 2)
+            button_preset_window = self.preset_canvas.create_window(x, y_coeff*35+20, window=button_preset)
+
+    def choose_preset(self):
+        h, m, s = self.preset["hh"], self.preset["mm"], self.preset["ss"]
+        self.time_selector.set_timestamp(h, m, s)
+
+        command = self.preset["pre-extinction_command"]
+        self.command_var.set(command)
+
+        text_catch = self.preset["text_catch"]
+        self.text_catch_var.set(text_catch)
+
+        if "auto_hide_to_tray" in self.preset and self.preset["auto_hide_to_tray"]:
+            self.hide_window()
+
+    def move_window_to_bottom_right(self) -> None:
+        self.root.update_idletasks()
+
+        # Get screen and window dimensions
+        self.screen_width = self.root.winfo_screenwidth()
+        self.screen_height = self.root.winfo_screenheight()
+
+        self.window_width = self.root.winfo_width()
+        self.window_height = self.root.winfo_height() # + 30
+
+        # Calculate new x and y coordinates for window
+        x = self.screen_width - self.window_width - 8
+        y = self.screen_height - self.window_height - 71
+
+        # Move window
+        self.root.geometry(f"{self.window_width}x{self.window_height}+{x}+{y}")
+        print("window moved")
+
+    def load_presets(self):
+        # preset_file_path = tkinter.filedialog.askopenfilename(title="Ouvrir un fichier",filetypes=[('Json file','.json'),('all files','.*')])
+        self.preset_file_path = join(self.PWD, "presets.json")
+        if self.preset_file_path and exists(self.preset_file_path):
+            with open(self.preset_file_path, "r") as f:
+                self.presets = json.load(f)
+
+    def save_preset(self):
+        self.preset_name = tkinter.simpledialog.askstring(
+            title="Save preset", prompt="Choose a name for your new preset")
+        self.h, self.m,self.s = self.time_selector.get_timestamp()
+        self.command = self.command_var.get()
+        self.text_catch = self.text_catch_var.get()
+        self.presets = self.load_presets()
+        self.preset = {}
+        self.preset["hh"], self.preset["mm"], self.preset["ss"] = self.h, self.m, self.s
+        self.preset["pre-extinction_command"] = self.command
+        self.preset["text_catch"] = self.text_catch
+        self.presets[self.preset_name] = self.preset
+
+        self.preset_file_path = join(self.PWD, "presets.json")
+        with open(self.preset_file_path, "w") as f:
+            json.dump(self.presets, f, indent=4)
+        # presets = load_presets()
+        # show_presets(presets, preset_canvas_frame, preset_canvas)
+
+    def open_image(self):
+        self.image_file = tkinter.filedialog.askopenfilename(title="Open file", filetypes=[('Image file', '.jpg .png'), ('all files', '.*')])
+        self.image_filedialog_var.set(self.image_file)
+
+    def remove_image(self):
+        self.image_filedialog_var.set("")
+
+    def quit_window(self):
+        self.icon.stop()
+        self.root.destroy()
+
+    def show_window(self):
+        self.icon.stop()
+        self.root.after(0, self.root.deiconify)
+
+    def hide_window(self, *args):
+        self.root.withdraw()
+        self.create_image()
+        menu = (item('Show', self.show_window), item('Quit', self.quit_window))
+        self.icon = pystray.Icon("icon", self.image, "Timed Power State", menu)
+        self.icon.run()
+
+    def create_image(self):
+        # Crée une image de 16x16 pixels pour l'icône du tray
+        width = 16
+        height = 16
+        self.image = Image.new('RGB', (width, height), (255, 255, 255))
+        dc = ImageDraw.Draw(self.image)
+        dc.rectangle((0, 0, width, height))
 
     def execute(self):
+        showinfo("Power signal", f"Power signal successfully sent")
         # Get abort signal
-        stopped = stop_thread.is_set()  # get the value
+        stopped = self.stop_thread.is_set()  # get the value
+        print("exez1")
         # Wait for n seconds if abort signal was issued
         for _ in range(self.seconds):
+            print("exec loop")
             # Waits n seconds then returns is the event was triggered
-            stopped = stop_thread.wait(1)
+            stopped = self.stop_thread.wait(1)
             if stopped:
+                print("exec stopped")
                 break
         
+        print(6)
+
         if not stopped:
+            print("exec 2")
             # Custom command execution
             if self.command:
+                print("exec cmd")
                 # Start the pre-ext command
                 thread = threading.Thread(target=self.execute_custom_command)
                 thread.start()
@@ -81,32 +349,44 @@ class Logic:
 
             # Find image availability
             if self.find_image:
+                print("exec image")
                 # Start the find_image
                 thread = threading.Thread(target=self.find_image_on_screen)
                 thread.start()
                 thread.join()
-
+        print(7)
         # Sends Power Signal
         # Get abort signal after pre-ext command ended
-        stopped = stop_thread.is_set()
+        stopped = self.stop_thread.is_set()
         if not stopped:
             # Send the extinction signal
-            subprocess.Popen(self.power_signal['signal'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            # print("signaled")
+            # subprocess.Popen(self.power_signal['signal'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            print("signaled")
+            return
         else:
-            print("Canceled")
+            print(8)
+            showerror("Aborted", "Power signal aborted")
+            return
+
+    
+    def kill(self):
+        process = psutil.Process(self.process.pid)
+        for proc in process.children(recursive=True):
+            proc.kill()
+        process.kill()
 
     def execute_custom_command(self) -> None:
         # Starting pre-ext command
-        process = subprocess.Popen(
-            self.power_signal["command"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        self.process = subprocess.Popen(
+            self.command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, shell=True)
 
         # While not aborted
-        while not stop_thread.is_set():
+        while not self.stop_thread.is_set():
+            print(self.stop_thread.is_set())
             # Get process output
-            output = process.stdout.readline()
+            output = self.process.stdout.readline()
             # If there's no output and the process hasn't finished, return
-            if output == '' and process.poll() is not None:
+            if output == '' and self.process.poll() is not None:
                 return
             # If the process sends an output and it hasn't finished
             if output:
@@ -116,7 +396,7 @@ class Logic:
                 if self.text_catch and self.text_catch in line_output:
                     break
 
-        process.terminate()
+        self.kill()
 
         
         # End process if aborted
@@ -131,168 +411,73 @@ class Logic:
                 pass
     
     def hibernate(self) -> None:
+        self.stop_thread.clear()
         # Set the hibernate command, get the input time, pre-ext cmd, and text catch
         self.power_signal = "rundll32.exe powrprof.dll,SetSuspendState 0,1,0"
-        self.seconds = time_selector.get_time()
-        self.command = command_var.get()
-        self.text_catch = text_catch_var.get()
-        self.find_image = image_filedialog_var.get()
+        self.seconds = self.time_selector.get_time()
+        self.command = self.command_var.get()
+        self.text_catch = self.text_catch_var.get()
+        self.find_image = self.image_filedialog_var.get()
         # Execute the desired actions
         self.thread = threading.Thread(
-            target=logic.execute)
+            target=self.execute)
         self.thread.start()
+        print(9)
 
     def shutdown(self) -> None:
+        self.stop_thread.clear()
         # Set the shutdown command, get the input time, pre-ext cmd, and text catch
         self.power_signal = "shutdown /f"
-        self.seconds = time_selector.get_time()
-        self.command = command_var.get()
-        self.text_catch = text_catch_var.get()
-        self.find_image = image_filedialog_var.get()
+        self.seconds = self.time_selector.get_time()
+        self.command = self.command_var.get()
+        self.text_catch = self.text_catch_var.get()
+        self.find_image = self.image_filedialog_var.get()
 
         # Execute the desired actions
         self.thread = threading.Thread(
-            target=logic.execute)
+            target=self.execute)
         self.thread.start()
 
     def reboot(self) -> None:
+        self.stop_thread.clear()
         # Set the reboot command, get the input time, pre-ext cmd, and text catch
         self.power_signal = "shutdown /r"
-        self.seconds = time_selector.get_time()
-        self.command = command_var.get()
-        self.text_catch = text_catch_var.get()
-        self.find_image = image_filedialog_var.get()
+        self.seconds = self.time_selector.get_time()
+        self.command = self.command_var.get()
+        self.text_catch = self.text_catch_var.get()
+        self.find_image = self.image_filedialog_var.get()
         # Execute the desired actions
 
-        self.thread = threading.Thread(target=logic.execute)
+        self.thread = threading.Thread(target=self.execute)
         self.thread.start()
         print("Rebooted")
 
     def stop(self) -> None:
         # Set abort signal
-        stop_thread.set()
+        self.stop_thread.set()
         # Wait for threads to end
-        self.thread.join()
-    
-
-def move_window_to_bottom_right(window):
-    window.update_idletasks()
-
-    window_width = window.winfo_width()
-    window_height = window.winfo_height() + 50
-
-    # Récupérer la largeur et la hauteur de l'écran
-    screen_width = window.winfo_screenwidth()
-    screen_height = window.winfo_screenheight()
-
-    # Calculer la position x et y pour que la fenêtre soit en bas à droite
-    x = screen_width - window_width - 8
-    y = screen_height - window_height - 40
-
-    # Déplacer la fenêtre
-    window.geometry(f"{window.winfo_width()}x{window.winfo_height()}+{x}+{y}")
+        # self.thread.join()
 
 
-def create_image():
-    # Crée une image de 16x16 pixels pour l'icône du tray
-    width = 16
-    height = 16
-    image = Image.new('RGB', (width, height), (255, 255, 255))
-    dc = ImageDraw.Draw(image)
-    dc.rectangle((0, 0, width, height))
-    return image
 
 
-def quit_window(icon):
-    icon.stop()
-    root.destroy()
 
 
-def show_window(icon):
-    icon.stop()
-    root.after(0, root.deiconify)
 
 
-def hide_window(*args):
-    root.withdraw()
-    image = create_image()
-    menu = (item('Show', show_window), item('Quit', quit_window))
-    icon = pystray.Icon("icon", image, "Timed Power State", menu)
-    icon.run()
 
 
-# def choose_preset(preset):
-#     h, m, s = preset["hh"], preset["mm"], preset["ss"]
-#     time_selector.set_timestamp(h, m, s)
-
-#     command = preset["pre-extinction_command"]
-#     command_var.set(command)
-
-#     text_catch = preset["text_catch"]
-#     text_catch_var.set(text_catch)
-
-#     if "auto_hide_to_tray" in preset and preset["auto_hide_to_tray"]:
-#         hide_window()
 
 
-# def load_presets(show_presets_bool) -> dict:
-#     # preset_file_path = tkinter.filedialog.askopenfilename(title="Ouvrir un fichier",filetypes=[('Json file','.json'),('all files','.*')])
-#     preset_file_path = join(PWD, "presets.json")
-#     if preset_file_path and exists(preset_file_path):
-#         with open(preset_file_path, "r") as f:
-#             presets = json.load(f)
-#             if show_presets_bool:
-#                 show_presets(presets)
-#             return presets
-#     else:
-#         return None
 
 
-# def show_presets(presets):
-#     for preset in presets:
-#         sub_menu_presets.add_command(
-#             label=preset, command=lambda: choose_preset(presets[preset]))
 
 
-# def save_preset():
-#     name = tkinter.simpledialog.askstring(
-#         title="Save preset", prompt="Choose a name for your new preset")
-#     h, m, s = time_selector.get_timestamp()
-#     command = command_var.get()
-#     text_catch = text_catch_var.get()
-#     presets = load_presets(False)
-#     preset = {}
-#     preset["hh"], preset["mm"], preset["ss"] = h, m, s
-#     preset["pre-extinction_command"] = command
-#     preset["text_catch"] = text_catch
-#     presets[name] = preset
-
-#     preset_file_path = join(PWD, "presets.json")
-#     with open(preset_file_path, "w") as f:
-#         json.dump(presets, f, indent=4)
 
 
-def open_image():
-    image_file = tkinter.filedialog.askopenfilename(title="Open file", filetypes=[
-                                                    ('Image file', '.jpg', '.png'), ('all files', '.*')])
-    image_filedialog_var.set(image_file)
 
 
-def remove_image():
-    image_filedialog_var.set("")
 
-
-PWD = getcwd()
-
-
-stop_thread = threading.Event()
-logic = Logic()
-
-
-root = tk.Tk()
-root.title("Timed Power State")
-
-root.after(0, lambda: move_window_to_bottom_right(root))
 
 # * Menu widgets ============================
 # menubar = tk.Menu(root)
@@ -309,140 +494,20 @@ root.after(0, lambda: move_window_to_bottom_right(root))
 # root.config(menu=menubar)
 # * ==========================================
 
-# * Notebook Widgets =========================
-notebook = ttk.Notebook(root)
-notebook.pack(expand=True)
-
-time_page = ttk.Frame(notebook)
-screen_page = ttk.Frame(notebook)
-system_page = ttk.Frame(notebook)
-# preset_page = ttk.Frame(notebook)
-
-time_page.pack(fill='both', expand=True, padx=10, pady=10)
-screen_page.pack(fill='both', expand=True, padx=10, pady=10)
-system_page.pack(fill="both", expand=True, padx=10, pady=10)
-# preset_page.pack(fill="both", expand=True, padx=10, pady=10)
 
 
-notebook.add(time_page, text='Time related')
-notebook.add(screen_page, text='Screen related')
-notebook.add(system_page, text='System related')
-# notebook.add(preset_page, text='Presets')
-
-# * =============================================
-
-# * Time Page =========================
-time_selector = TimeSelector(time_page)
-time_selector.pack(padx=10, pady=10)
-# * ===================================
-
-# * Screen page ===========================================
-
-image_filedialog_frame = ttk.Frame(screen_page)
-image_filedialog_frame.pack(padx=10, pady=10)
-
-image_filedialog_button = ttk.Button(
-    image_filedialog_frame, text="Open image", command=open_image)
-image_filedialog_button.pack(side="left")
-
-image_remove_filedialog_button = ttk.Button(
-    image_filedialog_frame, text="Remove image", command=remove_image)
-image_remove_filedialog_button.pack(side="left")
-
-image_filedialog_var = tk.StringVar()
-image_filedialog_text = ttk.Label(
-    image_filedialog_frame, textvariable=image_filedialog_var)
-image_filedialog_text.pack(side="right")
-
-# * =======================================================
-
-# * Sytem page =============================================
 
 
-command_frame = ttk.Frame(system_page)
-command_frame.pack(padx=10, pady=10)
-
-command_text = ttk.Label(
-    command_frame,
-    text="Pre-extinction command "
-)
-command_text.pack(side="left")
-
-command_var = tk.StringVar()
-command_entry = ttk.Entry(
-    command_frame,
-    textvariable=command_var
-)
-command_entry.pack(side="right", expand=True)
-
-text_catch_frame = ttk.Frame(system_page)
-text_catch_frame.pack(padx=10, pady=10)
-
-text_catch_text = ttk.Label(
-    text_catch_frame,
-    text="Catch text for extinction "
-)
-text_catch_text.pack(side="left")
-
-text_catch_var = tk.StringVar()
-text_catch_entry = ttk.Entry(
-    text_catch_frame,
-    textvariable=text_catch_var
-)
-text_catch_entry.pack(side="right", expand=True)
-# * ================================================
 
 
-# * Buttons ======================================
-button_frame = tk.Frame(root)
-button_frame.pack(expand=True, pady=10, padx=10)
-
-hibernate_button = ttk.Button(
-    button_frame,
-    text="Hibernate",
-    command=logic.hibernate
-    # command = lambda: print(str(command_var.get()))
-)
-hibernate_button.pack(side=tk.LEFT, padx=5)
-
-shutdown_button = ttk.Button(
-    button_frame,
-    text="Shutdown",
-    command=lambda: logic.shutdown(time_selector.get_time(), command_var.get())
-)
-shutdown_button.pack(side=tk.LEFT, padx=5)
-
-reboot_button = ttk.Button(
-    button_frame,
-    text="Reboot",
-    command=lambda: logic.reboot(time_selector.get_time(), command_var.get())
-)
-reboot_button.pack(side=tk.LEFT, padx=5)
-
-abort_button = ttk.Button(
-    root,
-    text="Abort",
-    command=logic.stop
-)
-abort_button.pack(padx=10, pady=10, side="left")
 
 
-hide_button = ttk.Button(
-    root,
-    text="Hide to tray",
-    command=hide_window
-)
-hide_button.pack(padx=10, pady=10, side="right")
 
-# * ==============================================
+
 
 # icon = root.bind("<Unmap>", hide_window)
 
 # root.withdraw() # hide
 
-theme = "Light"
-sv_ttk.set_theme(theme)
 
-root.mainloop()
-
-sys.exit()
+main = Main()
